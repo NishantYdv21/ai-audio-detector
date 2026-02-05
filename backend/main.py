@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from typing import Optional
 import uvicorn
 
-from utils import (
+from .utils import (
     preprocess_audio,
     cleanup_temp_file,
     validate_audio_file
