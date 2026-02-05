@@ -26,6 +26,8 @@ from .utils import (
     validate_audio_file
 )
 from .models import AudioAnalyzer
+ 
+os_token = os.getenv("HF_TOKEN", None)
 
 
 # Initialize FastAPI app
