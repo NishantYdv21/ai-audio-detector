@@ -25,7 +25,7 @@ from .utils import (
     cleanup_temp_file,
     validate_audio_file
 )
-from models import AudioAnalyzer
+from .models import AudioAnalyzer
 
 
 # Initialize FastAPI app
