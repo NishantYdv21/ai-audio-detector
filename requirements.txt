@@ -1,0 +1,26 @@
+# FastAPI & Web Server
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart>=0.0.6
+
+# Pydantic (let pip find compatible version with wheels)
+pydantic
+
+# Core & Standard Library
+requests>=2.31.0
+
+# Audio & ML (pre-built wheels)
+librosa
+soundfile
+numpy
+scipy
+
+# Latest available PyTorch versions
+torch>=2.6.0
+torchaudio>=2.6.0
+transformers>=4.30.0
+
+
+
+
+
