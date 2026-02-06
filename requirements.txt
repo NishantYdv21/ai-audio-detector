@@ -3,8 +3,8 @@ fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart>=0.0.6
 
-# Pydantic (let pip find compatible version with wheels)
-pydantic
+# Pydantic v2 (supports Python 3.13)
+pydantic>=2.0.0
 
 # Core & Standard Library
 requests>=2.31.0
