@@ -1,0 +1,29 @@
+# Optimized requirements for 512MB free tier deployment
+# Focuses on memory efficiency with lazy loading
+
+# FastAPI & Web Server - lightweight web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart>=0.0.6
+
+# Core packages - pydantic for data validation
+pydantic>=2.0.0
+
+# Audio processing - essential only
+librosa>=0.10.0
+soundfile>=0.12.1
+
+# Scientific computing with optimized defaults
+numpy>=1.24.0
+scipy>=1.11.0
+
+# PyTorch - using specific environment-appropriate build
+# Note: Render will install CPU-only version automatically
+torch>=2.0.0,<2.7.0
+torchaudio>=2.0.0,<2.7.0
+
+# Transformers with memory optimizations
+transformers>=4.35.0
+
+# Optional but helpful for production
+requests>=2.31.0

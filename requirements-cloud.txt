@@ -1,0 +1,22 @@
+# FastAPI & Web Server
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart>=0.0.6
+gunicorn==21.2.0
+
+# Pydantic
+pydantic
+
+# Core & Standard Library
+requests>=2.31.0
+
+# Audio & ML (optimized for cloud)
+librosa
+soundfile
+numpy
+scipy
+
+# PyTorch (slim versions for smaller cloud image)
+torch>=2.0.0
+torchaudio>=2.0.0
+transformers>=4.30.0

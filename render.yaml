@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ai-audio-detector
+    env: python
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip setuptools wheel && \
+      pip install --no-cache-dir -r requirements-optimized.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 8080
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: NUMEXPR_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
+      # Uncomment below if getting OOM errors:
+      # - key: USE_INT8_QUANTIZATION
+      #   value: "true"

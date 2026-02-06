@@ -20,12 +20,12 @@ from pydantic import BaseModel
 from typing import Optional
 import uvicorn
 
-from utils import (
+from .utils import (
     preprocess_audio,
     cleanup_temp_file,
     validate_audio_file
 )
-from models import AudioAnalyzer
+from .models import AudioAnalyzer
 
 
 # Initialize FastAPI app
@@ -56,17 +56,19 @@ analyzer: AudioAnalyzer = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize ML models when the server starts."""
+    """Initialize AudioAnalyzer on startup (models load lazily on first request)."""
     global analyzer
-    print("Starting up Audio Analyzer API...")
-    print("Loading ML models (this may take a minute)...")
+    print("🚀 Starting up Audio Analyzer API...")
+    print("ℹ Using lazy model loading for memory efficiency")
+    print("ℹ Models will load on first API request, not at startup")
     
     try:
         analyzer = AudioAnalyzer()
-        print("✓ Models loaded successfully!")
+        print("✓ Audio Analyzer initialized successfully!")
+        print("✓ Ready to accept requests")
     except Exception as e:
-        print(f"✗ Failed to load models: {str(e)}")
-        print("Server will start but API endpoints will fail")
+        print(f"✗ Failed to initialize analyzer: {str(e)}")
+        print("Server will start but API endpoints may fail")
 
 
 @app.on_event("shutdown")

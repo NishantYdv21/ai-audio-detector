@@ -1,0 +1,15 @@
+# This file specifies files that are not deployed to Google Cloud Run
+.git
+.gitignore
+README.md
+*.pyc
+__pycache__/
+.pytest_cache/
+venv/
+env/
+.DS_Store
+.vscode/
+.idea/
+test_*.py
+*.egg-info/
+.env

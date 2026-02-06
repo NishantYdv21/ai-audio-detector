@@ -1,0 +1,36 @@
+# Optimized Dockerfile for Render free tier (512MB memory)
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install only essential system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy optimized requirements
+COPY requirements-optimized.txt requirements.txt ./
+
+# Install with aggressive optimization
+RUN pip install --no-cache-dir -r requirements-optimized.txt && \
+    pip install --no-cache-dir gunicorn uvicorn[standard]
+
+# Copy application code
+COPY . .
+
+# Set memory optimization environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV TOKENIZERS_PARALLELISM=false
+
+# Expose port for Render
+EXPOSE 8080
+
+# Run with single worker (Render free tier limitation)
+# Using uvicorn directly instead of gunicorn for lower memory footprint
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]

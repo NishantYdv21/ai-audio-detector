@@ -1,6 +1,7 @@
 """
 Model loading and inference for audio analysis
 Uses Hugging Face transformers for pretrained models
+Memory-optimized for free tier deployment
 """
 
 import torch
@@ -11,25 +12,37 @@ from transformers import (
     WhisperProcessor,
     WhisperForConditionalGeneration
 )
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import warnings
+import os
 
 warnings.filterwarnings("ignore")
+
+# Memory optimization flags
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+torch.set_num_threads(1)  # Reduce CPU threads to save memory
 
 
 class AudioAnalyzer:
     """
     Manages all ML models for audio analysis
-    - Language detection using Whisper
+    - Language detection using Whisper (tiny for memory efficiency)
     - AI voice detection using AST ASVspoof model
+    - LAZY LOADING: Models loaded on first use, not at startup
     """
     
     def __init__(self, device: str = None):
         """
-        Initialize models
+        Initialize models lazily (on first use, not at startup)
         
         Args:
             device: 'cuda', 'cpu', or None (auto-detect)
+        
+        Memory optimization:
+        - Models use lazy loading (load only on first request)
+        - Uses whisper-tiny (74M params) instead of whisper-small (244M params)
+        - Float16 precision on GPU, Float32 on CPU
+        - Set USE_INT8_QUANTIZATION=true env var for 8-bit quantization (slower, but saves 4x memory)
         """
         # Auto-detect device
         if device is None:
@@ -37,32 +50,22 @@ class AudioAnalyzer:
         else:
             self.device = device
         
-        print(f"🔧 Loading models on {self.device.upper()}...")
+        # Check for aggressive memory optimization
+        self.use_quantization = os.getenv('USE_INT8_QUANTIZATION', 'false').lower() == 'true'
         
-        # Language detection model
-        self._load_language_model()
+        print(f"🔧 Audio Analyzer initialized (device: {self.device.upper()})")
+        print("ℹ Models will load on first request (lazy loading for memory efficiency)")
+        if self.use_quantization:
+            print("⚙ 8-bit quantization enabled (slower, but saves 4x memory)")
         
-        # AI voice detection model
-        self._load_ai_detection_model()
-        
-        print("✓ Models loaded successfully!")
-    
-    def _load_language_model(self):
-        """
-        Load Whisper for language detection
-        
-        Model: openai/whisper-small
-        Why: 680k hours training, 99 languages, battle-tested
-        Size: ~500MB
-        """
-        print("  Loading Whisper (language detection)...")
-        
-        model_name = "openai/whisper-small"
-        
-        self.whisper_processor = WhisperProcessor.from_pretrained(model_name)
-        self.whisper_model = WhisperForConditionalGeneration.from_pretrained(model_name)
-        self.whisper_model.to(self.device)
-        self.whisper_model.eval()
+        # Lazy-loaded model attributes (None until first use)
+        self._whisper_processor: Optional[WhisperProcessor] = None
+        self._whisper_model: Optional[WhisperForConditionalGeneration] = None
+        self._ast_feature_extractor: Optional[AutoFeatureExtractor] = None
+        self._ast_model: Optional[AutoModelForAudioClassification] = None
+        self._feature_classifier = None
+        self.ai_detection_available = False
+        self.use_feature_classifier = False
         
         # Supported languages
         self.supported_languages = {
@@ -73,55 +76,103 @@ class AudioAnalyzer:
             'ml': 'Malayalam'
         }
     
-    def _load_ai_detection_model(self):
-        """
-        Load AST model for AI voice detection
+    def _ensure_language_model_loaded(self):
+        """Lazy load Whisper model on first use"""
+        if self._whisper_model is not None:
+            return  # Already loaded
         
-        Model: MattyB95/AST-ASVspoof5-Synthetic-Voice-Detection
-        Why: Specifically trained on ASVspoof5 for synthetic voice detection
-        Architecture: Audio Spectrogram Transformer (state-of-the-art)
-        """
-        print("  Loading AST ASVspoof (AI voice detection)...")
+        print("  Loading Whisper-TINY (language detection)...")
+        try:
+            # Use whisper-tiny instead of whisper-small (4x smaller!)
+            # whisper-tiny: ~74M params (~300MB) vs whisper-small: ~244M params (~1GB)
+            model_name = "openai/whisper-tiny"
+            
+            self._whisper_processor = WhisperProcessor.from_pretrained(model_name)
+            
+            # Load with optional quantization for aggressive memory saving
+            load_in_8bit = self.use_quantization and self.device != "cuda"  # 8-bit quantization only on CPU with bitsandbytes
+            
+            self._whisper_model = WhisperForConditionalGeneration.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                load_in_8bit=load_in_8bit
+            )
+            self._whisper_model.to(self.device)
+            self._whisper_model.eval()
+            print("  ✓ Whisper-TINY loaded successfully!")
+        except Exception as e:
+            print(f"  ✗ Failed to load Whisper: {str(e)}")
+            self._whisper_model = None
+    
+    @property
+    def whisper_processor(self):
+        """Lazy-loaded whisper processor"""
+        self._ensure_language_model_loaded()
+        return self._whisper_processor
+    
+    @property
+    def whisper_model(self):
+        """Lazy-loaded whisper model"""
+        self._ensure_language_model_loaded()
+        return self._whisper_model
+    
+    def _ensure_ai_detection_model_loaded(self):
+        """Lazy load AST model for AI detection on first use"""
+        if self._ast_model is not None or self.ai_detection_available:
+            return  # Already loaded
+        
+        print("  Loading AST model (AI voice detection)...")
         
         # Try multiple model options in order of preference
         model_options = [
-            "MattyB95/AST-ASVspoof5-Synthetic-Voice-Detection",  # Correct model name!
-            "m3hrdadfi/wav2vec2-base-asvspoof",  # Alternative ASVspoof model
-            "facebook/wav2vec2-base"  # Fallback to fine-tune yourself
+            "MattyB95/AST-ASVspoof5-Synthetic-Voice-Detection",
+            "m3hrdadfi/wav2vec2-base-asvspoof",
         ]
         
         for model_name in model_options:
             try:
                 print(f"  Trying: {model_name}")
-                self.ast_feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
-                self.ast_model = AutoModelForAudioClassification.from_pretrained(model_name)
-                self.ast_model.to(self.device)
-                self.ast_model.eval()
+                self._ast_feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+                
+                # Load with optional quantization
+                load_in_8bit = self.use_quantization and self.device != "cuda"
+                
+                self._ast_model = AutoModelForAudioClassification.from_pretrained(
+                    model_name,
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    load_in_8bit=load_in_8bit
+                )
+                self._ast_model.to(self.device)
+                self._ast_model.eval()
                 self.ai_detection_available = True
                 self.ai_model_name = model_name
                 print(f"  ✓ Loaded: {model_name}")
-                
-                # Debug: Show model's label configuration
-                if hasattr(self.ast_model.config, 'id2label'):
-                    print(f"  📋 Model labels: {self.ast_model.config.id2label}")
-                else:
-                    print(f"  ⚠ No id2label found, using defaults")
-                
                 return
             except Exception as e:
                 print(f"  ⚠ Failed: {model_name} - {str(e)}")
                 continue
         
-        # If all fail, use feature-based approach
+        # Fallback to feature-based approach if models fail
         print("  Using feature-based AI detection")
         self.ai_detection_available = False
         self._init_feature_detector()
+    
+    @property
+    def ast_feature_extractor(self):
+        """Lazy-loaded AST feature extractor"""
+        self._ensure_ai_detection_model_loaded()
+        return self._ast_feature_extractor
+    
+    @property
+    def ast_model(self):
+        """Lazy-loaded AST model"""
+        self._ensure_ai_detection_model_loaded()
+        return self._ast_model
     
     def _init_feature_detector(self):
         """Initialize feature-based detection as fallback"""
         # This is more reliable than random heuristics
         import pickle
-        import os
         
         # Check if we have a pre-trained classifier
         model_path = "ai_voice_classifier.pkl"
